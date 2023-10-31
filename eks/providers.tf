@@ -2,8 +2,7 @@
 
 provider "aws" {
   region     = var.region
-  access_key = "AKIARBT534H7DVGPCJO6"
-  secret_key = "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"
+
 }
 
 provider "kubernetes" {
