@@ -1,11 +1,11 @@
-# terraform {
-#   required_version = ">=1.3.7"
-#   required_providers {
-#     aws = {
-#       source = "registry.terraform.io/hashicorp/aws"
-#     }
-#   }
-# }
+terraform {
+  required_version = ">= 1.3.5"
+  required_providers {
+    aws = {
+      source = "registry.terraform.io/hashicorp/aws"
+    }
+  }
+}
 
 data "aws_eks_cluster" "cluster" {
   name       = module.eks.cluster_name
@@ -18,13 +18,13 @@ data "aws_eks_cluster_auth" "cluster" {
 }
 data "aws_caller_identity" "current" {}
 
-data "aws_secretsmanager_secret" "argocd" {
-  name = "argocd.local.environment"
-}
+# data "aws_secretsmanager_secret" "argocd" {
+#   name = "argocd.local.environment"
+# }
 
-data "aws_secretsmanager_secret_version" "admin_password_version" {
-  secret_id = data.aws_secretsmanager_secret.argocd.id
-}
+# data "aws_secretsmanager_secret_version" "admin_password_version" {
+#   secret_id = data.aws_secretsmanager_secret.argocd.id
+# }
 module "vpc" {
   source = "terraform-aws-modules/vpc/aws"
 
@@ -60,28 +60,28 @@ resource "aws_security_group" "worker_group_mgmt_one" {
   }
 }
 
-module "vpc_cni_irsa" {
-  source  = "terraform-aws-modules/iam/aws//modules/iam-role-for-service-accounts-eks"
-  version = "~> 5.0"
+# module "vpc_cni_irsa" {
+#   source  = "terraform-aws-modules/iam/aws//modules/iam-role-for-service-accounts-eks"
+#   version = "~> 5.0"
 
-  role_name_prefix      = "VPC-CNI-IRSA"
-  attach_vpc_cni_policy = true
-  vpc_cni_enable_ipv6   = true
-  vpc_cni_enable_ipv4 = true
+#   role_name_prefix      = "VPC-CNI-IRSA"
+#   attach_vpc_cni_policy = true
+#   vpc_cni_enable_ipv6   = true
+#   vpc_cni_enable_ipv4 = true
 
-  oidc_providers = {
-    main = {
-      provider_arn               = module.eks.oidc_provider_arn
-      namespace_service_accounts = ["kube-system:aws-node"]
-    }
-  }
+#   oidc_providers = {
+#     main = {
+#       provider_arn               = module.eks.oidc_provider_arn
+#       namespace_service_accounts = ["kube-system:aws-node"]
+#     }
+#   }
 
-  tags = {
-    Terraform = "true"
-    Environment = "dev"
+#   tags = {
+#     Terraform = "true"
+#     Environment = "dev"
 
-  }
-}
+#   }
+# }
 
 module "eks" {
   source  = "terraform-aws-modules/eks/aws"
@@ -105,7 +105,7 @@ module "eks" {
     vpc-cni = {
       most_recent              = true
       before_compute           = true
-      service_account_role_arn = module.vpc_cni_irsa.iam_role_arn
+      # service_account_role_arn = module.vpc_cni_irsa.iam_role_arn
       configuration_values = jsonencode({
         env = {
           # Reference docs https://docs.aws.amazon.com/eks/latest/userguide/cni-increase-ip-addresses.html
@@ -124,7 +124,7 @@ module "eks" {
   create_cloudwatch_log_group = false
   eks_managed_node_group_defaults = {
     # ami_type       = "AL2_x86_64"
-    instance_types = ["t2.micro"]
+    # instance_types = ["t2.micro"]
     create_iam_role = true
         # We are using the IRSA created below for permissions
     # However, we have to deploy with the policy attached FIRST (when creating a fresh cluster)
@@ -150,7 +150,7 @@ module "eks" {
   
 
   # aws-auth configmap
-  create_aws_auth_configmap = true
+
   manage_aws_auth_configmap = true
 
   aws_auth_accounts = [
@@ -170,7 +170,21 @@ module "eks" {
   }
 }
 
+resource "random_password" "argocd" {
+  length           = 16
+  special          = true
+  override_special = "!#$%&*()-_=+[]{}<>:?"
+}
 
+resource "aws_secretsmanager_secret" "argocd" {
+  name                    = "argocdsecret"
+  recovery_window_in_days = 0 # Set to zero for this example to force delete during Terraform destroy
+}
+
+resource "aws_secretsmanager_secret_version" "argocd" {
+  secret_id     = aws_secretsmanager_secret.argocd.id
+  secret_string = random_password.argocd.result
+}
 # resource "kubernetes_deployment" "example" {
 #   metadata {
 #     name = "terraform-example"
